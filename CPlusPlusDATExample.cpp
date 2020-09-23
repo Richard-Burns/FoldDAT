@@ -117,29 +117,23 @@ CPlusPlusDATExample::execute(DAT_Output* output,
 		int foldChoice = inputs->getParInt("Fold");
 
 		const OP_DATInput	*cinput = inputs->getInputDAT(0);
+
+		bool isTable = cinput->isTable;
 		
-		if (cinput->isTable) {
+		if (isTable) {
 			int numRows = cinput->numRows;
 			int numCols = cinput->numCols;
-			bool isTable = cinput->isTable;
 
-			if (!isTable) // is Text
-			{
-				const char* str = cinput->getCell(0, 0);
-				output->setText(str);
-			}
-			else
-			{
-				output->setOutputDataType(DAT_OutDataType::Table);
+			output->setOutputDataType(DAT_OutDataType::Table);
 
-				int numCells = cinput->numRows*cinput->numCols;
+			int numCells = cinput->numRows*cinput->numCols;
+			int r = 0;
 
-				// rows to single column
+			switch (foldChoice) {
 
-				if (foldChoice == 0) {
+				case 0:
 
 					output->setTableSize(numCells, 1);
-					int r = 0;
 
 					for (int i = 0; i < cinput->numRows; i++)
 					{
@@ -150,10 +144,10 @@ CPlusPlusDATExample::execute(DAT_Output* output,
 							r++;
 						}
 					}
-				}
-				else if (foldChoice == 1) {
+					break;
+				case 1:
+
 					output->setTableSize(1, numCells);
-					int r = 0;
 
 					for (int i = 0; i < cinput->numRows; i++)
 					{
@@ -164,10 +158,11 @@ CPlusPlusDATExample::execute(DAT_Output* output,
 							r++;
 						}
 					}
-				}
-				else if (foldChoice == 2) {
+					break;
+
+				case 2:
+
 					output->setTableSize(numCells, 1);
-					int r = 0;
 
 					for (int i = 0; i < cinput->numCols; i++)
 					{
@@ -179,10 +174,10 @@ CPlusPlusDATExample::execute(DAT_Output* output,
 						}
 						//r++;
 					}
-				}
-				else {
+					break;
+					
+				case 3:
 					output->setTableSize(1, numCells);
-					int r = 0;
 
 					for (int i = 0; i < cinput->numCols; i++)
 					{
@@ -194,8 +189,14 @@ CPlusPlusDATExample::execute(DAT_Output* output,
 						}
 						//r++;
 					}
-				}
+					break;
+
 			}
+		}
+
+		else {
+			const char* str = cinput->getCell(0, 0);
+			output->setText(str);
 		}
 
 	}
