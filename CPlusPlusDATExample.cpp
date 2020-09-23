@@ -48,7 +48,7 @@ FillDATPluginInfo(DAT_PluginInfo *info)
 
 	// This DAT works with 0 or 1 inputs
 	info->customOPInfo.minInputs = 1;
-	info->customOPInfo.maxInputs = 1;
+	info->customOPInfo.maxInputs = 2;
 
 }
 
@@ -93,229 +93,196 @@ CPlusPlusDATExample::execute(DAT_Output* output,
 							const OP_Inputs* inputs,
 							void* reserved)
 {
+	
+	// If only input 0 is connected we enable the Fold parameter. If both inputs are connected we only enable the Interleave parameter.
+	inputs->enablePar("Fold", 1);
+	inputs->enablePar("Interleave", 1);
+	output->setOutputDataType(DAT_OutDataType::Text);
+	
 	if (!output)
 		return;
 
-	int input1Enabled = -1;
+	// check what inputs we have and check their type
+	bool input0Enabled = inputs->getInputDAT(0);
+	bool input1Enabled = inputs->getInputDAT(1);
+	bool input0IsTable = inputs->getInputDAT(0)->isTable;
+	bool input1IsTable = inputs->getInputDAT(1)->isTable;
 
-	if (inputs->getInputDAT(0)) {
-		input1Enabled = 1;
-	}
-
-	/*
-	int input2Enabled = -1;
-
-	if (inputs->getInputDAT(1)->opId) {
-		input2Enabled = 1;
-	}*/
+	// setup easy to use vars for input
+	const OP_DATInput* cinput0 = inputs->getInputDAT(0);
+	const OP_DATInput* cinput1 = inputs->getInputDAT(1);
 
 
-	if (input1Enabled)
+	// only input 0 connected
+	
+	if (input0Enabled && !input1Enabled)
 	{
 		inputs->enablePar("Fold", 1);
-		//inputs->enablePar("Interleave", 0);
+		inputs->enablePar("Interleave", 0);
 		int foldChoice = inputs->getParInt("Fold");
 
-		const OP_DATInput	*cinput = inputs->getInputDAT(0);
-
-		bool isTable = cinput->isTable;
-		
-		if (isTable) {
-			int numRows = cinput->numRows;
-			int numCols = cinput->numCols;
+		// if input 0 is a table re-organise depending on Fold menu choice.
+		if (input0IsTable) 
+		{
+			int numRows = cinput0->numRows;
+			int numCols = cinput0->numCols;
 
 			output->setOutputDataType(DAT_OutDataType::Table);
 
-			int numCells = cinput->numRows*cinput->numCols;
+			int numCells = cinput0->numRows*cinput0->numCols;
 			int r = 0;
 
-			switch (foldChoice) {
+			switch (foldChoice)
+			{
 
+				// rows to single column
 				case 0:
-
-					output->setTableSize(numCells, 1);
-
-					for (int i = 0; i < cinput->numRows; i++)
-					{
-						for (int j = 0; j < cinput->numCols; j++)
-						{
-							const char* str = cinput->getCell(i, j);
-							output->setCellString(r, 0, str);
-							r++;
-						}
-					}
+					reOrder(output, cinput0, numCells, false, false, false);
 					break;
+
+				// rows to single row
 				case 1:
-
-					output->setTableSize(1, numCells);
-
-					for (int i = 0; i < cinput->numRows; i++)
-					{
-						for (int j = 0; j < cinput->numCols; j++)
-						{
-							const char* str = cinput->getCell(i, j);
-							output->setCellString(0, r, str);
-							r++;
-						}
-					}
+					reOrder(output, cinput0, numCells, true, false, true);
 					break;
 
+				// columns to single column
 				case 2:
-
-					output->setTableSize(numCells, 1);
-
-					for (int i = 0; i < cinput->numCols; i++)
-					{
-						for (int j = 0; j < cinput->numRows; j++)
-						{
-							const char* str = cinput->getCell(j, i);
-							output->setCellString(r, 0, str);
-							r++;
-						}
-						//r++;
-					}
+					reOrder(output, cinput0, numCells, false, true, false);
 					break;
-					
+				
+				// columns to single row	
 				case 3:
-					output->setTableSize(1, numCells);
-
-					for (int i = 0; i < cinput->numCols; i++)
-					{
-						for (int j = 0; j < cinput->numRows; j++)
-						{
-							const char* str = cinput->getCell(j, i);
-							output->setCellString(0, r, str);
-							r++;
-						}
-						//r++;
-					}
+					reOrder(output, cinput0, numCells, true, true, true);
 					break;
 
 			}
 		}
+		// if input 0 is a text DAT use the fold DAT as a standard pass through as other DATs seem to.
+		else 
+		{
 
-		else {
-			const char* str = cinput->getCell(0, 0);
+			const char* str = cinput0->getCell(0, 0);
 			output->setText(str);
+
+			/*
+			output->setTableSize(1, 1);
+			output->setCellString(0, 0, cinput0->getCell(0, 0));
+			output->setOutputDataType(DAT_OutDataType::Table);
+			*/
 		}
 
 	}
+
+
 	 // INTERLEAVE
+
+	
 	/*
-	if (input1Enabled && input2Enabled)
+	if (input0Enabled && input1Enabled)
 	{
-		//inputs->enablePar("Rows", 0);		// not used
-		//inputs->enablePar("Cols", 0);		// not used
-		//inputs->enablePar("Outputtype", 0);	// not used
 		inputs->enablePar("Fold", 0);
 		inputs->enablePar("Interleave", 1);
 
 		int interChoice = inputs->getParInt("Interleave");
 		int i = inputs->getNumInputs();
-
-		const OP_DATInput *cinput = inputs->getInputDAT(0);
-		const OP_DATInput *cinput2 = inputs->getInputDAT(1);
 	
+		int numRows = cinput0->numRows;
+		int numCols = cinput0->numCols;
+		int numRows2 = cinput1->numRows;
+		int numCols2 = cinput1->numCols;
+		int totalRows = numRows + numRows2;
+		int totalCols = numCols + numCols2;
+		int maxRows = numRows;
+		int maxCols = numCols;
 
-		if (cinput && cinput2) {
-			int numRows = cinput->numRows;
-			int numCols = cinput->numCols;
-			int numRows2 = cinput2->numRows;
-			int numCols2 = cinput2->numCols;
-			bool isTable = cinput->isTable;
-			bool isTable2 = cinput2->isTable;
-			int totalRows = numRows + numRows2;
-			int totalCols = numCols + numCols2;
-			int maxRows = numRows;
-			int maxCols = numCols;
-
-			if (numRows2 > numRows) {
-				maxRows = numRows2;
-			}
-
-			if (numCols2 > numCols) {
-				maxCols = numCols2;
-			}
-
-
-			if (!isTable2) // is Text
-			{
-				const char* str = cinput->getCell(0, 0);
-				output->setText(str);
-			}
-			else {
-
-				output->setOutputDataType(DAT_OutDataType::Table);
-
-				if (interChoice == 0) {
-
-					output->setTableSize(totalRows, maxCols);
-					int r = 0;
-					int r2 = 0;
-					int rowsAvailable = 0;
-					int curRow = 0;
-
-					for (int i = 0; i < maxRows; i++) {
-						if (r < numRows) {
-							for (int j = 0; j < cinput->numCols; j++)
-							{
-								const char* str = cinput->getCell(r, j);
-								output->setCellString(curRow, j, str);
-							}
-							r++;
-							curRow++;
-						}
-
-						if (r2 < numRows2) {
-							for (int j = 0; j < cinput2->numCols; j++)
-							{
-								const char* str = cinput2->getCell(r2, j);
-								output->setCellString(curRow, j, str);
-							}
-							r2++;
-							curRow++;
-						}
-
-					}
-
-
-				}
-				else {
-
-					output->setTableSize(maxRows, totalCols);
-					int r = 0;
-					int r2 = 0;
-					int rowsAvailable = 0;
-					int curRow = 0;
-
-					for (int i = 0; i < maxCols; i++) {
-						if (r < numCols) {
-							for (int j = 0; j < cinput->numRows; j++)
-							{
-								const char* str = cinput->getCell(j, r);
-								output->setCellString(j, curRow, str);
-							}
-							r++;
-							curRow++;
-						}
-
-						if (r2 < numCols2) {
-							for (int j = 0; j < cinput2->numRows; j++)
-							{
-								const char* str = cinput2->getCell(j, r2);
-								output->setCellString(j, curRow, str);
-							}
-							r2++;
-							curRow++;
-						}
-
-					}
-
-				}
-			}
-
+		if (numRows2 > numRows) {
+			maxRows = numRows2;
 		}
-	}*/
+
+		if (numCols2 > numCols) {
+			maxCols = numCols2;
+		}
+
+
+		if (!input1IsTable) // is Text
+		{
+			const char* str = cinput0->getCell(0, 0);
+			output->setText(str);
+		}
+		else {
+
+			output->setOutputDataType(DAT_OutDataType::Table);
+
+			int r = 0;
+			int r2 = 0;
+			int rowsAvailable = 0;
+			int curRow = 0;
+
+			switch (interChoice) {
+
+			case 0:
+
+				output->setTableSize(totalRows, maxCols);
+
+				for (int i = 0; i < maxRows; i++) {
+					if (r < numRows) {
+						for (int j = 0; j < cinput0->numCols; j++)
+						{
+							const char* str = cinput0->getCell(r, j);
+							output->setCellString(curRow, j, str);
+						}
+						r++;
+						curRow++;
+					}
+
+					if (r2 < numRows2) {
+						for (int j = 0; j < cinput1->numCols; j++)
+						{
+							const char* str = cinput1->getCell(r2, j);
+							output->setCellString(curRow, j, str);
+						}
+						r2++;
+						curRow++;
+					}
+
+				}
+
+				break;
+
+
+			case 1:
+
+				output->setTableSize(maxRows, totalCols);
+
+				for (int i = 0; i < maxCols; i++) {
+					if (r < numCols) {
+						for (int j = 0; j < cinput0->numRows; j++)
+						{
+							const char* str = cinput0->getCell(j, r);
+							output->setCellString(j, curRow, str);
+						}
+						r++;
+						curRow++;
+					}
+
+					if (r2 < numCols2) {
+						for (int j = 0; j < cinput1->numRows; j++)
+						{
+							const char* str = cinput1->getCell(j, r2);
+							output->setCellString(j, curRow, str);
+						}
+						r2++;
+						curRow++;
+					}
+
+				}
+
+				break;
+			}
+		}
+
+	}
+	*/
 }
 
 int32_t
@@ -374,7 +341,7 @@ CPlusPlusDATExample::setupParameters(OP_ParameterManager* manager, void* reserve
 	}
 
 	// Interleave Menu
-	/*
+	
 	{
 		OP_StringParameter	np;
 
@@ -387,10 +354,53 @@ CPlusPlusDATExample::setupParameters(OP_ParameterManager* manager, void* reserve
 
 		OP_ParAppendResult res = manager->appendMenu(np, 2, names, labels);
 		assert(res == OP_ParAppendResult::Success);
-	}*/
+	}
 }
 
 void
 CPlusPlusDATExample::pulsePressed(const char* name, void* reserved1)
 {
+}
+
+DAT_Output* CPlusPlusDATExample::reOrder(DAT_Output* output, const OP_DATInput* input, int numCells, bool tableFlip, int loopFlip, int orderFlip)
+{
+	output->setTableSize(numCells, 1);
+	if (tableFlip) 
+	{
+		output->setTableSize(1, numCells);
+	}
+
+	int r = 0;
+	int nr = input->numRows;
+	int nc = input->numCols;
+
+	int f1 = nr;
+	int f2 = nc;
+
+	if (loopFlip) 
+	{
+		f1 = nc;
+		f2 = nr;
+	}
+
+	for (int i = 0; i < f1; i++)
+	{
+		for (int j = 0; j < f2; j++)
+		{
+			const char* str = input->getCell(i, j);
+			if (loopFlip) 
+			{
+				str = input->getCell(j, i);
+			}
+			
+			output->setCellString(r, 0, str);
+			
+			if (orderFlip)
+			{
+				output->setCellString(0, r, str);
+			}
+			r++;
+		}
+	}
+	return output;
 }

@@ -43,6 +43,8 @@ public:
 	virtual void		setupParameters(OP_ParameterManager* manager, void* reserved1) override;
 	virtual void		pulsePressed(const char* name, void* reserved1) override;
 
+	virtual DAT_Output* reOrder(DAT_Output* output, const OP_DATInput* input, int numCells, bool tableFlip, int loopFlip, int orderFlip);
+
 private:
 
 
